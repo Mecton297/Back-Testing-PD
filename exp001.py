@@ -95,6 +95,30 @@ def forward_returns(close, event_mask, horizons=(5, 10, 20, 60)):
     return results, len(event_dates)
 
 
+def build_event_log(close, event_mask, ticker, subset_label, horizons=(5, 10, 20, 60)):
+    """
+    Construit le journal événementiel: une ligne par signal, avec le
+    rendement à chaque horizon (NaN si l'horizon dépasse la fin des données).
+    """
+    event_mask = event_mask.reindex(close.index, fill_value=False)
+    event_dates = close.index[event_mask]
+    idx_map = {date: i for i, date in enumerate(close.index)}
+    n = len(close)
+
+    rows = []
+    for d in event_dates:
+        i = idx_map[d]
+        row = {"date": d.strftime("%Y-%m-%d"), "ticker": ticker, "sous_ensemble": subset_label}
+        for h in horizons:
+            if i + h < n:
+                row[f"ret_{h}"] = round((close.iloc[i + h] / close.iloc[i] - 1) * 100, 4)
+            else:
+                row[f"ret_{h}"] = None
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def summarize(rets_dict):
     rows = []
     for h, rets in rets_dict.items():
@@ -190,3 +214,33 @@ if st.button("Lancer EXP-001 / V1.0"):
             f"Ticker = {ticker} · Historique = {years} ans\n"
             f"Aucune règle de sortie · Aucune optimisation post-résultats"
         )
+
+    # ============================================================
+    # PHASE 2 — Exports bruts pour l'analyse statistique complète
+    # ============================================================
+    st.markdown("---")
+    st.markdown("### 📤 Exports Phase 2")
+
+    log_C = build_event_log(daily["close"], ev_C_daily_mask, ticker, "Weekly C")
+    log_D = build_event_log(daily["close"], ev_D_daily, ticker, "Daily D")
+    log_combo = build_event_log(daily["close"], ev_combo, ticker, "Combined")
+    full_log = pd.concat([log_C, log_D, log_combo], ignore_index=True)
+
+    st.download_button(
+        "⬇️ Télécharger le journal des signaux (CSV)",
+        data=full_log.to_csv(index=False).encode("utf-8"),
+        file_name=f"exp001_journal_{ticker.replace('.', '_')}.csv",
+        mime="text/csv",
+    )
+
+    prices_out = daily[["close"]].reset_index()
+    prices_out.columns = ["date", "close"]
+    prices_out["date"] = prices_out["date"].dt.strftime("%Y-%m-%d")
+    prices_out["ticker"] = ticker
+
+    st.download_button(
+        "⬇️ Télécharger la série de prix quotidiens (CSV)",
+        data=prices_out.to_csv(index=False).encode("utf-8"),
+        file_name=f"exp001_prix_{ticker.replace('.', '_')}.csv",
+        mime="text/csv",
+    )
