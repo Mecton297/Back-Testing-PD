@@ -159,6 +159,8 @@ if st.button("Lancer EXP-001 / V1.0"):
     st.subheader(f"Résultats — {ticker}")
     st.caption(f"{len(raw)} séances quotidiennes · {len(weekly)} semaines complètes utilisées")
 
+    st.markdown("### 📅 Signal hebdomadaire seul (règle C — franchissement du zéro)")
+    rets_C, n_C = forward_returns(daily["close"], ev_C_daily_mask)
     st.write(f"Nombre total de signaux : **{n_C}**")
     st.dataframe(summarize(rets_C), hide_index=True)
 
