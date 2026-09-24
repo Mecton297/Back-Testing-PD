@@ -159,8 +159,6 @@ if st.button("Lancer EXP-001 / V1.0"):
     st.subheader(f"Résultats — {ticker}")
     st.caption(f"{len(raw)} séances quotidiennes · {len(weekly)} semaines complètes utilisées")
 
-    st.markdown("### 📅 Signal hebdomadaire seul (règle C — franchissement du zéro)")
-    rets_C, n_C = forward_returns(daily["close"], ev_C_daily_mask)
     st.write(f"Nombre total de signaux : **{n_C}**")
     st.dataframe(summarize(rets_C), hide_index=True)
 
@@ -185,3 +183,8 @@ if st.button("Lancer EXP-001 / V1.0"):
             f"EXP-001 / V1.0\n"
             f"SMI(10,3,3,EMA) · Signal = EMA(10) du SMI\n"
             f"Hebdo = franchissement du zéro à la hausse\n"
+            f"Quotidien = croisement haussier + sortie de -40 (k={K} séances)\n"
+            f"Combiné = Quotidien ET SMI hebdo>0 (dernière semaine complètement close)\n"
+            f"Ticker = {ticker} · Historique = {years} ans\n"
+            f"Aucune règle de sortie · Aucune optimisation post-résultats"
+        )
