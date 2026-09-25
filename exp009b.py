@@ -80,6 +80,10 @@ st.write(f"**Univers verrouillé** : {', '.join(TICKERS)} (rendements) + {TICKER
 st.write(f"**Période** : {START} → {END}")
 st.write(f"**Choc VIX** : VIX_t / VIX_(t-{K}) - 1 ≥ {int(SEUIL*100)}%, franchissement strict")
 
+if "exp009b_combined" not in st.session_state:
+    st.session_state.exp009b_combined = None
+    st.session_state.exp009b_prices = None
+
 if st.button("Lancer EXP-009B / V1.0"):
     with st.spinner("Téléchargement du VIX..."):
         vix_raw = yf.Ticker(TICKER_VIX).history(start=START, end=END, auto_adjust=False)
@@ -139,27 +143,43 @@ if st.button("Lancer EXP-009B / V1.0"):
     if all_logs:
         combined = pd.concat(all_logs, ignore_index=True)
         prices_combined = pd.concat(all_prices, ignore_index=True)
+        st.session_state.exp009b_combined = combined
+        st.session_state.exp009b_prices = prices_combined
 
-        st.success(f"{len(combined)} signaux au total sur {len(TICKERS)} actifs.")
+# --- Affichage des résultats et téléchargements, persistants entre les reruns ---
+if st.session_state.exp009b_combined is not None:
+    combined = st.session_state.exp009b_combined
+    prices_combined = st.session_state.exp009b_prices
 
-        st.download_button(
-            "⬇️ Télécharger le journal combiné (CSV)",
-            data=combined.to_csv(index=False).encode("utf-8"),
-            file_name="exp009b_journal_ALL.csv",
-            mime="text/csv",
+    st.success(f"{len(combined)} signaux au total sur {len(TICKERS)} actifs.")
+
+    st.download_button(
+        "⬇️ Télécharger le journal combiné (CSV)",
+        data=combined.to_csv(index=False).encode("utf-8"),
+        file_name="exp009b_journal_ALL.csv",
+        mime="text/csv",
+        key="dl_journal",
+    )
+    st.download_button(
+        "⬇️ Télécharger les prix quotidiens combinés (CSV)",
+        data=prices_combined.to_csv(index=False).encode("utf-8"),
+        file_name="exp009b_prix_ALL.csv",
+        mime="text/csv",
+        key="dl_prices",
+    )
+
+    st.markdown("### 📋 Alternative : copier-coller le texte brut")
+    st.caption("Si l'envoi de fichier ne fonctionne pas, sélectionne tout le texte ci-dessous et colle-le directement dans le chat.")
+    with st.expander("Voir le journal (CSV en texte)"):
+        st.text_area("Journal", combined.to_csv(index=False), height=300, key="txt_journal")
+    with st.expander("Voir les prix (CSV en texte)"):
+        st.text_area("Prix", prices_combined.to_csv(index=False), height=300, key="txt_prices")
+
+    with st.expander("🔒 Identification de l'expérience"):
+        st.code(
+            f"EXP-009B / V1.0 — Réplication transversale du choc VIX\n"
+            f"Signal identique à EXP-009 (VIX_t/VIX_(t-{K})-1 >= {SEUIL}, franchissement)\n"
+            f"Actifs = {', '.join(TICKERS)}\n"
+            f"Période = {START} à {END}\n"
+            f"Aucune règle de sortie · Aucune optimisation post-résultats"
         )
-        st.download_button(
-            "⬇️ Télécharger les prix quotidiens combinés (CSV)",
-            data=prices_combined.to_csv(index=False).encode("utf-8"),
-            file_name="exp009b_prix_ALL.csv",
-            mime="text/csv",
-        )
-
-        with st.expander("🔒 Identification de l'expérience"):
-            st.code(
-                f"EXP-009B / V1.0 — Réplication transversale du choc VIX\n"
-                f"Signal identique à EXP-009 (VIX_t/VIX_(t-{K})-1 >= {SEUIL}, franchissement)\n"
-                f"Actifs = {', '.join(TICKERS)}\n"
-                f"Période = {START} à {END}\n"
-                f"Aucune règle de sortie · Aucune optimisation post-résultats"
-            )
