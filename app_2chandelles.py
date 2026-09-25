@@ -11,13 +11,19 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# --- CSS ULTRA-COMPACT ET POLICES RÉDUITES ---
 st.markdown(
     """
     <style>
-        .block-container { padding-top: 1.5rem; padding-bottom: 2rem; padding-left: 0.8rem; padding-right: 0.8rem; }
-        div[data-testid="stMetricValue"] { font-size: 1.2rem !important; }
-        .stButton>button { width: 100%; border-radius: 8px; }
-        hr { margin: 1rem 0; }
+        .block-container { padding-top: 0.5rem !important; padding-bottom: 1rem !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
+        h1 { font-size: 1.3rem !important; margin-bottom: 0.2rem !important; }
+        h2, h3 { font-size: 1.0rem !important; margin-top: 0.3rem !important; margin-bottom: 0.2rem !important; }
+        .stNumberInput, .stTextInput, .stRadio { font-size: 0.8rem !important; }
+        div[data-baseweb="input"] { min-height: 28px !important; }
+        input { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 0.85rem !important; }
+        .streamlit-expanderHeader { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; font-size: 0.85rem !important; }
+        div[data-testid="stExpanderDetails"] { padding: 0.3rem !important; }
+        hr { margin: 0.4rem 0 !important; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -141,26 +147,22 @@ def executer_backtest(bougies, capital_initial, marge_achat_pct, stop_initial_pc
     }
 
 
+# --- TITRE & REGLAGES COMPACTS ---
 st.title("📈 Backtest 2 Chandelles")
-st.subheader("⚙️ Paramètres généraux")
 
-capital_total = st.number_input("Capital Total Initial ($)", min_value=100, max_value=10000000, value=10000, step=500)
+c1, c2, c3 = st.columns([2, 1, 1])
+with c1:
+    capital_total = st.number_input("Capital ($)", value=10000, step=500)
+with c2:
+    annee_debut = st.number_input("Début", min_value=2000, max_value=2026, value=2020)
+with c3:
+    annee_fin = st.number_input("Fin", min_value=2001, max_value=2026, value=2025)
 
-col_annee1, col_annee2 = st.columns(2)
-with col_annee1:
-    annee_debut = st.number_input("Début (Janv.)", min_value=2000, max_value=2026, value=2020)
-with col_annee2:
-    annee_fin = st.number_input("Fin (Janv.)", min_value=2001, max_value=2026, value=2025)
-
-mode_capital = st.radio(
-    "Mode d'allocation du capital :",
-    options=["100 % sur chaque FNB (Comparaison)", "Répartition personnalisée (Portefeuille)"],
-    index=0,
-)
-
-st.markdown("---")
-st.subheader("🎯 Indice de Référence")
-symbole_indice = st.text_input("Symbole Indice", value="^NDX")
+c_mode, c_ind = st.columns([2, 1])
+with c_mode:
+    mode_capital = st.radio("Mode :", ["100% / FNB", "Répartition %"], horizontal=True)
+with c_ind:
+    symbole_indice = st.text_input("Indice", value="^NDX")
 
 perf_ndx_str = "N/A"
 if symbole_indice:
@@ -168,98 +170,77 @@ if symbole_indice:
     if donnees_ndx and len(donnees_ndx) > 2:
         perf_ndx = ((donnees_ndx[-1]["close"] - donnees_ndx[0]["close"]) / donnees_ndx[0]["close"]) * 100.0
         perf_ndx_str = str(round(perf_ndx, 1)) + " %"
-        st.info(symbole_indice + " (Buy & Hold) : " + perf_ndx_str + " sur la période")
+
+st.caption("🎯 **" + symbole_indice + " (Buy&Hold)** : " + perf_ndx_str)
 
 st.markdown("---")
-st.subheader("📦 FNB à Analyser")
 
+# --- CONFIGURATION COMPACTE DES FNB (DANS DES SECTIONS REPLIÉES PAR DÉFAUT) ---
 fnbs_defaut = ["XEG.TO", "ZMT.TO", "XST.TO", "ZEB.TO", "", ""]
+resultats_tableau = []
+
 capital_accumule_robot = 0.0
 capital_accumule_initial = 0.0
 rendements_robot_liste = []
 rendements_bh_liste = []
-details_export = []
+
+with st.expander("⚙️ Configuration des 6 FNB (Cliquer pour ouvrir/fermer)", expanded=False):
+    for idx in range(6):
+        titre_defaut = fnbs_defaut[idx]
+        col_s, col_ma, col_si, col_ms = st.columns([2, 1, 1, 1])
+        
+        with col_s:
+            sym = st.text_input("FNB #" + str(idx+1), value=titre_defaut, key="sym_" + str(idx)).upper()
+        with col_ma:
+            ma = st.number_input("Ach%", value=0.05, step=0.01, key="ma_" + str(idx))
+        with col_si:
+            si = st.number_input("StInit%", value=3.0, step=0.5, key="si_" + str(idx))
+        with col_ms:
+            ms = st.number_input("StSuiv%", value=0.05, step=0.01, key="ms_" + str(idx))
+
+# --- CALCUL ET AFFICHAGE CÔTÉ À CÔTÉ (TABLEAU) ---
+st.subheader("📊 Résultats Comparatifs")
 
 for idx in range(6):
-    is_custom = idx >= 4
-    titre_defaut = fnbs_defaut[idx]
-    label_section = "FNB Officiel #" + str(idx + 1) if not is_custom else "FNB Personnalisé #" + str(idx - 3)
+    sym = st.session_state.get("sym_" + str(idx), fnbs_defaut[idx]).upper()
+    if not sym:
+        continue
+    
+    ma = st.session_state.get("ma_" + str(idx), 0.05)
+    si = st.session_state.get("si_" + str(idx), 3.0)
+    ms = st.session_state.get("ms_" + str(idx), 0.05)
 
-    with st.expander("🏷️ " + label_section, expanded=True):
-        symbole = st.text_input("Ticker Yahoo #" + str(idx + 1), value=titre_defaut, key="sym_" + str(idx)).upper()
+    cap_fnb = capital_total if "100%" in mode_capital else (capital_total / 4.0)
+    bougies = obtenir_donnees_historiques(sym, int(annee_debut), int(annee_fin))
 
-        if not symbole:
-            st.caption("Case vide - Ignorée.")
-            continue
-
-        inclure = True
-        part_pct = 25.0
-        if "Répartition" in mode_capital:
-            col_inc, col_part = st.columns([1, 2])
-            with col_inc:
-                inclure = st.checkbox("Inclure", value=True, key="inc_" + str(idx))
-            with col_part:
-                part_pct = st.number_input("Part (%)", min_value=0.0, max_value=100.0, value=25.0, step=5.0, key="part_" + str(idx))
-
-        if not inclure:
-            st.caption("Exclu de la répartition.")
-            continue
-
-        cap_fnb = capital_total if "100 %" in mode_capital else (capital_total * (part_pct / 100.0))
-        bougies = obtenir_donnees_historiques(symbole, int(annee_debut), int(annee_fin))
-
-        if not bougies or len(bougies) < 5:
-            st.error("Données introuvables pour " + symbole)
-            continue
-
-        ranges = [((b["high"] - b["low"]) / b["low"]) * 100.0 for b in bougies]
-        volatilite_moy = sum(ranges) / len(ranges)
-        st.caption("📊 Volatilité journalière moyenne : " + str(round(volatilite_moy, 2)) + " %")
-
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            marge_achat = st.number_input("Achat (+%)", value=0.05, step=0.01, key="ma_" + str(idx))
-        with col_p2:
-            stop_init = st.number_input("Stop Init (-%)", value=3.0, step=0.5, key="si_" + str(idx))
-        with col_p3:
-            marge_stop = st.number_input("Stop Suiv (-%)", value=0.05, step=0.01, key="ms_" + str(idx))
-
-        res = executer_backtest(bougies, cap_fnb, marge_achat, stop_init, marge_stop)
-
+    if bougies and len(bougies) >= 5:
+        res = executer_backtest(bougies, cap_fnb, ma, si, ms)
         if res:
-            st.markdown("**📈 Résultats du Backtest :**")
-            col_r1, col_r2 = st.columns(2)
-            with col_r1:
-                st.metric("Robot (%)", str(round(res['rendement_robot_pct'], 1)) + " %")
-                st.metric("Pire chute", "-" + str(round(res['max_drawdown_pct'], 1)) + " %")
-            with col_r2:
-                st.metric("Buy & Hold (%)", str(round(res['rendement_bh_pct'], 1)) + " %")
-                st.metric("Capital Final", str(int(res['capital_final'])) + " $")
-
+            resultats_tableau.append({
+                "FNB": sym,
+                "Robot %": str(round(res['rendement_robot_pct'], 1)) + "%",
+                "B&H %": str(round(res['rendement_bh_pct'], 1)) + "%",
+                "Max DD": "-" + str(round(res['max_drawdown_pct'], 1)) + "%",
+                "Cap. Final": str(int(res['capital_final'])) + " $"
+            })
             capital_accumule_robot += res["capital_final"]
             capital_accumule_initial += cap_fnb
             rendements_robot_liste.append(res["rendement_robot_pct"])
             rendements_bh_liste.append(res["rendement_bh_pct"])
 
-            ligne = symbole + " -> Robot: " + str(round(res['rendement_robot_pct'], 1)) + "% | Buy&Hold: " + str(round(res['rendement_bh_pct'], 1)) + "% | MaxDD: -" + str(round(res['max_drawdown_pct'], 1)) + "%"
-            details_export.append(ligne)
+if resultats_tableau:
+    # Tableau synthétique où les résultats sont affichés côte à côte
+    st.dataframe(resultats_tableau, use_container_width=True, hide_index=True)
 
-st.markdown("---")
-st.subheader("🏁 Bilan Global du Portefeuille")
-
-if capital_accumule_initial > 0:
+    st.markdown("---")
+    # Bilan Global compact
     if "Répartition" in mode_capital:
         profit_total = capital_accumule_robot - capital_accumule_initial
         perf_globale_pct = (profit_total / capital_accumule_initial) * 100.0
-        st.metric("Capital Final Combiné", str(int(capital_accumule_robot)) + " $")
-        st.write("Rendement Global Portefeuille : " + str(round(perf_globale_pct, 2)) + " %")
+        st.caption("🏁 **Cap. Final Global :** " + str(int(capital_accumule_robot)) + " $ | **Rendement :** " + str(round(perf_globale_pct, 2)) + " %")
     else:
         moy_robot = sum(rendements_robot_liste) / len(rendements_robot_liste)
         moy_bh = sum(rendements_bh_liste) / len(rendements_bh_liste)
-        st.write("Rendement Moyen Robot : " + str(round(moy_robot, 2)) + " %")
-        st.write("Rendement Moyen Buy & Hold : " + str(round(moy_bh, 2)) + " %")
-
-    st.markdown("---")
-    st.subheader("📋 Exporter les résultats")
-    rapport_texte = "RAPPORT BACKTEST\n" + "\n".join(details_export)
-    st.code(rapport_texte, language="text")
+        st.caption("🏁 **Moy. Robot :** " + str(round(moy_robot, 1)) + "% | **Moy. Buy&Hold :** " + str(round(moy_bh, 1)) + "%")
+else:
+    st.info("Aucune donnée disponible.")
