@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Injection CSS pour forcer le design mobile vertical et supprimer les marges superflues
+# Injection CSS pour forcer le design mobile vertical
 st.markdown(
     """
     <style>
@@ -33,7 +33,7 @@ st.markdown(
 # ==========================================
 @st.cache_data(ttl=3600)
 def obtenir_donnees_historiques(symbole, annee_debut, annee_fin):
-    """Télécharge les cours quotidiens depuis Yahoo Finance sans bibliothèque tierce (urllib + json)"""
+    """Télécharge les cours quotidiens depuis Yahoo Finance sans bibliothèque tierce"""
     try:
         t_debut = int(datetime(annee_debut, 1, 1).timestamp())
         t_fin = int(datetime(annee_fin + 1, 1, 5).timestamp())
@@ -109,7 +109,7 @@ def executer_backtest(
         h_actuel, l_actuel = bougie_actuelle["high"], bougie_actuelle["low"]
 
         if not en_position:
-            # Condition d'entrée : Achat Stop sur franchissement du sommet des 2 bougies précédentes
+            # Condition d'entrée : Achat Stop
             sommet_2_bougies = max(b1["high"], b2["high"])
             prix_declenchement = sommet_2_bougies * (1.0 + marge_achat)
 
@@ -122,7 +122,6 @@ def executer_backtest(
                     en_position = False
                     continue
 
-                # Stop initial plafonné au risque max du capital
                 stop_securite_capital = prix_entree * (1.0 - stop_init_max)
                 bas_2_bougies = min(b1["low"], b2["low"])
                 stop_technique = bas_2_bougies * (1.0 - marge_stop)
@@ -130,19 +129,17 @@ def executer_backtest(
                 prix_stop = max(stop_securite_capital, stop_technique)
 
         else:
-            # Condition de sortie : Touche ou casse du Stop Loss suiveur
+            # Condition de sortie : Stop Loss suiveur
             if l_actuel <= prix_stop:
                 en_position = False
                 capital = nb_actions * prix_stop
                 nb_actions = 0
             else:
-                # Mise à jour du Stop Suiveur
                 bas_2_bougies = min(b1["low"], b2["low"])
                 nouveau_stop = bas_2_bougies * (1.0 - marge_stop)
                 if nouveau_stop > prix_stop:
                     prix_stop = nouveau_stop
 
-        # Suivi de la valeur actuelle du portefeuille & Drawdown
         valeur_courante = (
             capital if not en_position else (nb_actions * bougie_actuelle["close"])
         )
@@ -244,8 +241,6 @@ capital_accumule_robot = 0.0
 capital_accumule_initial = 0.0
 rendements_robot_liste = []
 rendements_bh_liste = []
-
-# Dictionnaire stockant les résultats pour la fonction d'exportation
 details_export = []
 
 for idx in range(6):
@@ -354,11 +349,16 @@ for idx in range(6):
             rendements_robot_liste.append(res["rendement_robot_pct"])
             rendements_bh_liste.append(res["rendement_bh_pct"])
 
-            # Sauvegarde propre pour le rapport texte
+            r_robot = res["rendement_robot_pct"]
+            r_bh = res["rendement_bh_pct"]
+            c_final = res["capital_final"]
+            dd_pct = res["max_drawdown_pct"]
+            dd_dol = res["max_drawdown_dollar"]
+
             ligne_export = (
-                f"• {symbole} (Volatilité: {volatilite_moy:.2f}%)\n"
-                f"  Robot: {res['rendement_robot_pct']:+.1f}% | B&H: {res['rendement_bh_pct']:+.1f}%\n"
-                f"  Cap. Final: {res['capital_final']:,.0f} $\vert{} Max DD: -{res['max_drawdown_pct']:.1f}\% (-{res['max_drawdown_dollar']:.0f}$)"
+                f"• {symbole} (Volatilite: {volatilite_moy:.2f}%)\n"
+                f"  Robot: {r_robot:+.1f}% | B&H: {r_bh:+.1f}%\n"
+                f"  Cap. Final: {c_final:,.0f} $\vert{} Max DD: -{dd_pct:.1f}\% (-{dd_dol:.0f}$)"
             )
             details_export.append(ligne_export)
 
@@ -383,7 +383,7 @@ if capital_accumule_initial > 0:
         st.write(f"**Rendement Global Portefeuille :** `{perf_globale_pct:+.2f} %`")
 
         texte_bilan_global = (
-            f"Capital Départ: {capital_accumule_initial:,.0f} $\n"
+            f"Capital Depart: {capital_accumule_initial:,.0f} $\n"
             f"Capital Final: {capital_accumule_robot:,.0f} $({profit_total:+.0f}$)\n"
             f"Rendement Global: {perf_globale_pct:+.2f} %"
         )
@@ -399,7 +399,7 @@ if capital_accumule_initial > 0:
             f"Rendement Moyen Buy & Hold: {moy_bh:+.2f} %"
         )
 
-    # --- EXPORTATION ET BOUTON DE COPIE RAPIDE ---
+    # --- EXPORTATION DES RÉSULTATS ---
     st.markdown("---")
     st.subheader("📋 Exporter les résultats")
 
@@ -407,9 +407,9 @@ if capital_accumule_initial > 0:
     rapport_texte = (
         f"=== RAPPORT BACKTEST 2 CHANDELLES ===\n"
         f"Date: {date_jour}\n"
-        f"Période: Janvier {annee_debut} - Janvier {annee_fin}\n"
+        f"Periode: Janvier {annee_debut} - Janvier {annee_fin}\n"
         f"Indice ({symbole_indice}): {perf_ndx_str}\n\n"
-        f"--- DÉTAILS PAR FNB ---\n" + "\n\n".join(details_export) + "\n\n"
+        f"--- DETAILS PAR FNB ---\n" + "\n\n".join(details_export) + "\n\n"
         f"--- BILAN GLOBAL ---\n" + texte_bilan_global
     )
 
