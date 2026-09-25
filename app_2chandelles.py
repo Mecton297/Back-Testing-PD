@@ -1,4 +1,3 @@
-
 import json
 import math
 import urllib.request
@@ -355,12 +354,13 @@ for idx in range(6):
             rendements_robot_liste.append(res["rendement_robot_pct"])
             rendements_bh_liste.append(res["rendement_bh_pct"])
 
-            # Sauvegarde pour le rapport texte
-            details_export.append(
-                f"• {symbole} (Volatilite: {volatilite_moy:.2f}%)\n"
+            # Sauvegarde propre pour le rapport texte
+            ligne_export = (
+                f"• {symbole} (Volatilité: {volatilite_moy:.2f}%)\n"
                 f"  Robot: {res['rendement_robot_pct']:+.1f}% | B&H: {res['rendement_bh_pct']:+.1f}%\n"
                 f"  Cap. Final: {res['capital_final']:,.0f} $\vert{} Max DD: -{res['max_drawdown_pct']:.1f}\% (-{res['max_drawdown_dollar']:.0f}$)"
             )
+            details_export.append(ligne_export)
 
 # --- BILAN GLOBAL ET EXPORTATION EN BAS DE PAGE ---
 st.markdown("---")
@@ -399,25 +399,23 @@ if capital_accumule_initial > 0:
             f"Rendement Moyen Buy & Hold: {moy_bh:+.2f} %"
         )
 
-    # --- NOUVELLE FONCTIONNALITÉ : EXPORTATION ET BOUTON DE COPIE RAPIDE ---
+    # --- EXPORTATION ET BOUTON DE COPIE RAPIDE ---
     st.markdown("---")
     st.subheader("📋 Exporter les résultats")
 
-    # Génération du résumé au format texte
     date_jour = datetime.now().strftime("%Y-%m-%d %H:%M")
     rapport_texte = (
         f"=== RAPPORT BACKTEST 2 CHANDELLES ===\n"
         f"Date: {date_jour}\n"
-        f"Periode: Janvier {annee_debut} - Janvier {annee_fin}\n"
+        f"Période: Janvier {annee_debut} - Janvier {annee_fin}\n"
         f"Indice ({symbole_indice}): {perf_ndx_str}\n\n"
-        f"--- DETAILS PAR FNB ---\n" + "\n\n".join(details_export) + "\n\n"
+        f"--- DÉTAILS PAR FNB ---\n" + "\n\n".join(details_export) + "\n\n"
         f"--- BILAN GLOBAL ---\n" + texte_bilan_global
     )
 
-    # Zone de code avec bouton de copie automatique natif à Streamlit
     st.code(rapport_texte, language="text")
     st.caption(
-        "💡 Appuie sur la petite icône de **copie** en haut à droite du cadre ci-dessus pour tout copier dans ton presse-papier."
+        "💡 Appuie sur la petite icône de **copie** en haut à droite du cadre ci-dessus pour tout copier."
     )
 
 else:
