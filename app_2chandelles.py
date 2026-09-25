@@ -2,6 +2,7 @@ import json
 import math
 import urllib.request
 from datetime import datetime
+import pandas as pd
 import streamlit as st
 
 st.set_page_config(
@@ -11,19 +12,25 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- CSS ULTRA-COMPACT ET POLICES RÉDUITES ---
+# --- CSS ULTRA-COMPACT MOBILE ET SUPPRESSION DES ESPACES ---
 st.markdown(
     """
     <style>
-        .block-container { padding-top: 0.5rem !important; padding-bottom: 1rem !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
-        h1 { font-size: 1.3rem !important; margin-bottom: 0.2rem !important; }
-        h2, h3 { font-size: 1.0rem !important; margin-top: 0.3rem !important; margin-bottom: 0.2rem !important; }
-        .stNumberInput, .stTextInput, .stRadio { font-size: 0.8rem !important; }
-        div[data-baseweb="input"] { min-height: 28px !important; }
-        input { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 0.85rem !important; }
-        .streamlit-expanderHeader { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; font-size: 0.85rem !important; }
-        div[data-testid="stExpanderDetails"] { padding: 0.3rem !important; }
-        hr { margin: 0.4rem 0 !important; }
+        .block-container { padding-top: 0.2rem !important; padding-bottom: 0.5rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
+        h1, h2, h3 { font-size: 0.95rem !important; margin: 0.1rem 0 !important; padding: 0 !important; }
+        div[data-testid="stForm"] { border: none !important; padding: 0 !important; }
+        .stNumberInput, .stTextInput, .stRadio { font-size: 0.75rem !important; margin-bottom: -10px !important; }
+        div[data-baseweb="input"] { min-height: 24px !important; }
+        input { padding-top: 1px !important; padding-bottom: 1px !important; font-size: 0.8rem !important; }
+        .streamlit-expanderHeader { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; font-size: 0.8rem !important; }
+        div[data-testid="stExpanderDetails"] { padding: 0.2rem !important; }
+        hr { margin: 0.2rem 0 !important; }
+        
+        /* Force les colonnes Streamlit à rester côte à côte sur mobile */
+        [data-testid="column"] {
+            min-width: 0px !important;
+            flex: 1 1 0% !important;
+        }
     </style>
 """,
     unsafe_allow_html=True,
@@ -143,25 +150,26 @@ def executer_backtest(bougies, capital_initial, marge_achat_pct, stop_initial_pc
         "rendement_robot_pct": rendement_robot_pct,
         "rendement_bh_pct": rendement_bh_pct,
         "max_drawdown_pct": max_drawdown_pct,
-        "max_drawdown_dollar": max_drawdown_dollar,
     }
 
 
-# --- TITRE & REGLAGES COMPACTS ---
+# --- SÉLECTION DES PARAMÈTRES (GRILLE TRÈS COMPACTE) ---
 st.title("📈 Backtest 2 Chandelles")
 
-c1, c2, c3 = st.columns([2, 1, 1])
-with c1:
+# Ligne 1 : Capital, Années (Début & Fin) sur une seule ligne
+col1, col2, col3 = st.columns([1.2, 1, 1])
+with col1:
     capital_total = st.number_input("Capital ($)", value=10000, step=500)
-with c2:
+with col2:
     annee_debut = st.number_input("Début", min_value=2000, max_value=2026, value=2020)
-with c3:
+with col3:
     annee_fin = st.number_input("Fin", min_value=2001, max_value=2026, value=2025)
 
-c_mode, c_ind = st.columns([2, 1])
-with c_mode:
+# Ligne 2 : Mode et Indice sur une seule ligne
+col_m, col_i = st.columns([1.5, 1])
+with col_m:
     mode_capital = st.radio("Mode :", ["100% / FNB", "Répartition %"], horizontal=True)
-with c_ind:
+with col_i:
     symbole_indice = st.text_input("Indice", value="^NDX")
 
 perf_ndx_str = "N/A"
@@ -169,46 +177,41 @@ if symbole_indice:
     donnees_ndx = obtenir_donnees_historiques(symbole_indice, int(annee_debut), int(annee_fin))
     if donnees_ndx and len(donnees_ndx) > 2:
         perf_ndx = ((donnees_ndx[-1]["close"] - donnees_ndx[0]["close"]) / donnees_ndx[0]["close"]) * 100.0
-        perf_ndx_str = str(round(perf_ndx, 1)) + " %"
+        perf_ndx_str = f"{int(round(perf_ndx))}%"
 
-st.caption("🎯 **" + symbole_indice + " (Buy&Hold)** : " + perf_ndx_str)
+st.caption(f"🎯 **{symbole_indice} (Buy&Hold)** : {perf_ndx_str}")
 
-st.markdown("---")
-
-# --- CONFIGURATION COMPACTE DES FNB (DANS DES SECTIONS REPLIÉES PAR DÉFAUT) ---
+# --- REGLAGES FNB MASQUÉS PAR DÉFAUT ---
 fnbs_defaut = ["XEG.TO", "ZMT.TO", "XST.TO", "ZEB.TO", "", ""]
-resultats_tableau = []
+
+with st.expander("⚙️ Modifier FNB / Réglages", expanded=False):
+    for idx in range(6):
+        c_s, c_ma, c_si, c_ms = st.columns([1.5, 1, 1, 1])
+        with c_s:
+            st.text_input(f"FNB #{idx+1}", value=fnbs_defaut[idx], key=f"sym_{idx}")
+        with c_ma:
+            st.number_input("Ach%", value=0.05, step=0.01, key=f"ma_{idx}")
+        with c_si:
+            st.number_input("StInit%", value=3.0, step=0.5, key=f"si_{idx}")
+        with c_ms:
+            st.number_input("StSuiv%", value=0.05, step=0.01, key=f"ms_{idx}")
+
+# --- CALCUL ET AFFICHAGE TABLEAU INVERSÉ ---
+dict_resultats = {"Métrique": ["% Test", "% Hold", "Gain $", "DD %"]}
 
 capital_accumule_robot = 0.0
 capital_accumule_initial = 0.0
 rendements_robot_liste = []
 rendements_bh_liste = []
 
-with st.expander("⚙️ Configuration des 6 FNB (Cliquer pour ouvrir/fermer)", expanded=False):
-    for idx in range(6):
-        titre_defaut = fnbs_defaut[idx]
-        col_s, col_ma, col_si, col_ms = st.columns([2, 1, 1, 1])
-        
-        with col_s:
-            sym = st.text_input("FNB #" + str(idx+1), value=titre_defaut, key="sym_" + str(idx)).upper()
-        with col_ma:
-            ma = st.number_input("Ach%", value=0.05, step=0.01, key="ma_" + str(idx))
-        with col_si:
-            si = st.number_input("StInit%", value=3.0, step=0.5, key="si_" + str(idx))
-        with col_ms:
-            ms = st.number_input("StSuiv%", value=0.05, step=0.01, key="ms_" + str(idx))
-
-# --- CALCUL ET AFFICHAGE CÔTÉ À CÔTÉ (TABLEAU) ---
-st.subheader("📊 Résultats Comparatifs")
-
 for idx in range(6):
-    sym = st.session_state.get("sym_" + str(idx), fnbs_defaut[idx]).upper()
+    sym = st.session_state.get(f"sym_{idx}", fnbs_defaut[idx]).upper()
     if not sym:
         continue
-    
-    ma = st.session_state.get("ma_" + str(idx), 0.05)
-    si = st.session_state.get("si_" + str(idx), 3.0)
-    ms = st.session_state.get("ms_" + str(idx), 0.05)
+
+    ma = st.session_state.get(f"ma_{idx}", 0.05)
+    si = st.session_state.get(f"si_{idx}", 3.0)
+    ms = st.session_state.get(f"ms_{idx}", 0.05)
 
     cap_fnb = capital_total if "100%" in mode_capital else (capital_total / 4.0)
     bougies = obtenir_donnees_historiques(sym, int(annee_debut), int(annee_fin))
@@ -216,31 +219,34 @@ for idx in range(6):
     if bougies and len(bougies) >= 5:
         res = executer_backtest(bougies, cap_fnb, ma, si, ms)
         if res:
-            resultats_tableau.append({
-                "FNB": sym,
-                "Robot %": str(round(res['rendement_robot_pct'], 1)) + "%",
-                "B&H %": str(round(res['rendement_bh_pct'], 1)) + "%",
-                "Max DD": "-" + str(round(res['max_drawdown_pct'], 1)) + "%",
-                "Cap. Final": str(int(res['capital_final'])) + " $"
-            })
+            # Formatage sans décimales (arrondis entiers)
+            test_pct = f"{int(round(res['rendement_robot_pct']))}%"
+            hold_pct = f"{int(round(res['rendement_bh_pct']))}%"
+            gain_dollar = f"{int(round(res['capital_final']))} $"
+            dd_pct = f"-{int(round(res['max_drawdown_pct']))}%"
+
+            dict_resultats[sym] = [test_pct, hold_pct, gain_dollar, dd_pct]
+
             capital_accumule_robot += res["capital_final"]
             capital_accumule_initial += cap_fnb
             rendements_robot_liste.append(res["rendement_robot_pct"])
             rendements_bh_liste.append(res["rendement_bh_pct"])
 
-if resultats_tableau:
-    # Tableau synthétique où les résultats sont affichés côte à côte
-    st.dataframe(resultats_tableau, use_container_width=True, hide_index=True)
+st.markdown("---")
+st.subheader("📊 Résultats")
 
-    st.markdown("---")
-    # Bilan Global compact
+if len(dict_resultats) > 1:
+    df_resultats = pd.DataFrame(dict_resultats)
+    st.dataframe(df_resultats, use_container_width=True, hide_index=True)
+
+    # Résumé global sans décimales
     if "Répartition" in mode_capital:
         profit_total = capital_accumule_robot - capital_accumule_initial
         perf_globale_pct = (profit_total / capital_accumule_initial) * 100.0
-        st.caption("🏁 **Cap. Final Global :** " + str(int(capital_accumule_robot)) + " $ | **Rendement :** " + str(round(perf_globale_pct, 2)) + " %")
+        st.caption(f"🏁 **Cap. Final Global :** {int(round(capital_accumule_robot))} $ | **Rendement :** {int(round(perf_globale_pct))}%")
     else:
         moy_robot = sum(rendements_robot_liste) / len(rendements_robot_liste)
         moy_bh = sum(rendements_bh_liste) / len(rendements_bh_liste)
-        st.caption("🏁 **Moy. Robot :** " + str(round(moy_robot, 1)) + "% | **Moy. Buy&Hold :** " + str(round(moy_bh, 1)) + "%")
+        st.caption(f"🏁 **Moy. Robot :** {int(round(moy_robot))}% | **Moy. Buy&Hold :** {int(round(moy_bh))}%")
 else:
-    st.info("Aucune donnée disponible.")
+    st.info("Aucun FNB sélectionné.")
