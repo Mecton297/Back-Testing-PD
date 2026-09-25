@@ -60,11 +60,13 @@ if st.button("Lancer l'audit des trous"):
                          f"{' (close=' + str(round(df.loc[first_after, 'close'], 5)) + ')' if first_after is not None else ''}")
 
                 # Toutes les observations reellement presentes dans la zone (pas juste les bornes)
-                zone_obs = df.loc[(df.index >= z_start) & (df.index <= z_end), ["close"]]
+                zone_obs = df.loc[(df.index >= z_start) & (df.index <= z_end), ["close"]].copy()
                 if len(zone_obs) > 0:
+                    zone_obs.index.name = "date"  # reset_index() utilise ce nom, quel qu'il soit chez yfinance
+                    zone_obs = zone_obs.reset_index()
+                    zone_obs["date"] = zone_obs["date"].dt.strftime("%Y-%m-%d (%A)")
                     st.write(f"**{len(zone_obs)} observation(s) réellement présente(s) dans la zone :**")
-                    st.dataframe(zone_obs.reset_index().rename(columns={"index": "date"}).assign(
-                        date=lambda d: d["date"].dt.strftime("%Y-%m-%d (%A)")), hide_index=True)
+                    st.dataframe(zone_obs, hide_index=True)
 
     with st.expander("🔒 Rappel du périmètre"):
         st.code(
