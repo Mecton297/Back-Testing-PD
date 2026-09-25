@@ -4,9 +4,6 @@ import urllib.request
 from datetime import datetime
 import streamlit as st
 
-# ==========================================
-# CONFIGURATION DE LA PAGE MOBILE STREAMLIT
-# ==========================================
 st.set_page_config(
     page_title="Backtest 2 Chandelles",
     page_icon="📈",
@@ -14,7 +11,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Injection CSS pour forcer le design mobile vertical
 st.markdown(
     """
     <style>
@@ -28,22 +24,15 @@ st.markdown(
 )
 
 
-# ==========================================
-# MOTEUR TÉLÉCHARGEMENT YAHOO (URLLIB NATIVE)
-# ==========================================
 @st.cache_data(ttl=3600)
 def obtenir_donnees_historiques(symbole, annee_debut, annee_fin):
-    """Télécharge les cours quotidiens depuis Yahoo Finance sans bibliothèque tierce"""
     try:
         t_debut = int(datetime(annee_debut, 1, 1).timestamp())
         t_fin = int(datetime(annee_fin + 1, 1, 5).timestamp())
 
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbole}?period1={t_debut}&period2={t_fin}&interval=1d"
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbole + "?period1=" + str(t_debut) + "&period2=" + str(t_fin) + "&interval=1d"
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         req = urllib.request.Request(url, headers=headers)
@@ -60,9 +49,7 @@ def obtenir_donnees_historiques(symbole, annee_debut, annee_fin):
             if h is not None and l is not None and c is not None:
                 bougies.append(
                     {
-                        "date": datetime.fromtimestamp(
-                            timestamps[i]
-                        ).strftime("%Y-%m-%d"),
+                        "date": datetime.fromtimestamp(timestamps[i]).strftime("%Y-%m-%d"),
                         "high": float(h),
                         "low": float(l),
                         "close": float(c),
@@ -73,12 +60,7 @@ def obtenir_donnees_historiques(symbole, annee_debut, annee_fin):
         return []
 
 
-# ==========================================
-# MOTEUR DE BACKTEST : « LES 2 CHANDELLES »
-# ==========================================
-def executer_backtest(
-    bougies, capital_initial, marge_achat_pct, stop_initial_pct, marge_stop_pct
-):
+def executer_backtest(bougies, capital_initial, marge_achat_pct, stop_initial_pct, marge_stop_pct):
     if len(bougies) < 3:
         return None
 
@@ -96,20 +78,16 @@ def executer_backtest(
     stop_init_max = stop_initial_pct / 100.0
     marge_stop = marge_stop_pct / 100.0
 
-    # 1. Calcul du Buy & Hold
     prix_depart = bougies[0]["close"]
     prix_fin = bougies[-1]["close"]
     rendement_bh_pct = ((prix_fin - prix_depart) / prix_depart) * 100.0
 
-    # 2. Simulation quotidienne
     for i in range(2, len(bougies)):
         bougie_actuelle = bougies[i]
         b1, b2 = bougies[i - 1], bougies[i - 2]
-
         h_actuel, l_actuel = bougie_actuelle["high"], bougie_actuelle["low"]
 
         if not en_position:
-            # Condition d'entrée : Achat Stop
             sommet_2_bougies = max(b1["high"], b2["high"])
             prix_declenchement = sommet_2_bougies * (1.0 + marge_achat)
 
@@ -125,11 +103,9 @@ def executer_backtest(
                 stop_securite_capital = prix_entree * (1.0 - stop_init_max)
                 bas_2_bougies = min(b1["low"], b2["low"])
                 stop_technique = bas_2_bougies * (1.0 - marge_stop)
-
                 prix_stop = max(stop_securite_capital, stop_technique)
 
         else:
-            # Condition de sortie : Stop Loss suiveur
             if l_actuel <= prix_stop:
                 en_position = False
                 capital = nb_actions * prix_stop
@@ -140,18 +116,12 @@ def executer_backtest(
                 if nouveau_stop > prix_stop:
                     prix_stop = nouveau_stop
 
-        valeur_courante = (
-            capital if not en_position else (nb_actions * bougie_actuelle["close"])
-        )
+        valeur_courante = capital if not en_position else (nb_actions * bougie_actuelle["close"])
         if valeur_courante > metrique_max_capital:
             metrique_max_capital = valeur_courante
 
         drawdown_actuel_dollar = metrique_max_capital - valeur_courante
-        drawdown_actuel_pct = (
-            (drawdown_actuel_dollar / metrique_max_capital) * 100.0
-            if metrique_max_capital > 0
-            else 0.0
-        )
+        drawdown_actuel_pct = (drawdown_actuel_dollar / metrique_max_capital) * 100.0 if metrique_max_capital > 0 else 0.0
 
         if drawdown_actuel_dollar > max_drawdown_dollar:
             max_drawdown_dollar = drawdown_actuel_dollar
@@ -160,9 +130,7 @@ def executer_backtest(
     if en_position:
         capital = nb_actions * bougies[-1]["close"]
 
-    rendement_robot_pct = (
-        (capital - capital_initial) / capital_initial
-    ) * 100.0
+    rendement_robot_pct = ((capital - capital_initial) / capital_initial) * 100.0
 
     return {
         "capital_final": capital,
@@ -173,66 +141,35 @@ def executer_backtest(
     }
 
 
-# ==========================================
-# INTERFACE UTILISATEUR MOBILE STREAMLIT
-# ==========================================
 st.title("📈 Backtest 2 Chandelles")
-
-# --- TOP PAGE : PARAMÈTRES GÉNÉRAUX ---
 st.subheader("⚙️ Paramètres généraux")
 
-capital_total = st.number_input(
-    "Capital Total Initial ($)",
-    min_value=100,
-    max_value=10000000,
-    value=10000,
-    step=500,
-)
+capital_total = st.number_input("Capital Total Initial ($)", min_value=100, max_value=10000000, value=10000, step=500)
 
 col_annee1, col_annee2 = st.columns(2)
 with col_annee1:
-    annee_debut = st.number_input(
-        "Début (Janv.)", min_value=2000, max_value=2026, value=2020
-    )
+    annee_debut = st.number_input("Début (Janv.)", min_value=2000, max_value=2026, value=2020)
 with col_annee2:
-    annee_fin = st.number_input(
-        "Fin (Janv.)", min_value=2001, max_value=2026, value=2025
-    )
+    annee_fin = st.number_input("Fin (Janv.)", min_value=2001, max_value=2026, value=2025)
 
 mode_capital = st.radio(
     "Mode d'allocation du capital :",
-    options=[
-        "100 % sur chaque FNB (Comparaison)",
-        "Répartition personnalisée (Portefeuille)",
-    ],
+    options=["100 % sur chaque FNB (Comparaison)", "Répartition personnalisée (Portefeuille)"],
     index=0,
 )
 
-# --- INDICE DE RÉFÉRENCE ---
 st.markdown("---")
 st.subheader("🎯 Indice de Référence")
 symbole_indice = st.text_input("Symbole Indice", value="^NDX")
 
 perf_ndx_str = "N/A"
 if symbole_indice:
-    donnees_ndx = obtenir_donnees_historiques(
-        symbole_indice, int(annee_debut), int(annee_fin)
-    )
+    donnees_ndx = obtenir_donnees_historiques(symbole_indice, int(annee_debut), int(annee_fin))
     if donnees_ndx and len(donnees_ndx) > 2:
-        perf_ndx = (
-            (donnees_ndx[-1]["close"] - donnees_ndx[0]["close"])
-            / donnees_ndx[0]["close"]
-        ) * 100.0
-        perf_ndx_str = f"{perf_ndx:+.1f} %"
-        st.info(
-            f"**{symbole_indice} (Buy & Hold)** : **{perf_ndx_str}** sur la période"
-        )
-    else:
-        st.warning(
-            f"Impossible de charger l'indice de référence ({symbole_indice})."
-        )
+        perf_ndx = ((donnees_ndx[-1]["close"] - donnees_ndx[0]["close"]) / donnees_ndx[0]["close"]) * 100.0
+        perf_ndx_str = str(round(perf_ndx, 1)) + " %"
+        st.info(symbole_indice + " (Buy & Hold) : " + perf_ndx_str + " sur la période")
 
-# --- SECTION FNB (4 OFFICIELS + 2 PERSONNALISÉS) ---
 st.markdown("---")
 st.subheader("📦 FNB à Analyser")
 
@@ -246,177 +183,83 @@ details_export = []
 for idx in range(6):
     is_custom = idx >= 4
     titre_defaut = fnbs_defaut[idx]
-    label_section = (
-        f"FNB Officiel #{idx+1}"
-        if not is_custom
-        else f"FNB Personnalisé #{idx-3}"
-    )
+    label_section = "FNB Officiel #" + str(idx + 1) if not is_custom else "FNB Personnalisé #" + str(idx - 3)
 
-    with st.expander(
-        f"🏷️ {label_section} : {titre_defaut if titre_defaut else 'Non défini'}",
-        expanded=True,
-    ):
-        symbole = st.text_input(
-            f"Ticker Yahoo #{idx+1}",
-            value=titre_defaut,
-            key=f"sym_{idx}",
-            placeholder="Ex: HURA.TO",
-        ).upper()
+    with st.expander("🏷️ " + label_section, expanded=True):
+        symbole = st.text_input("Ticker Yahoo #" + str(idx + 1), value=titre_defaut, key="sym_" + str(idx)).upper()
 
         if not symbole:
             st.caption("Case vide - Ignorée.")
             continue
 
         inclure = True
-        part_pct = 100.0 / 4.0
+        part_pct = 25.0
         if "Répartition" in mode_capital:
             col_inc, col_part = st.columns([1, 2])
             with col_inc:
-                inclure = st.checkbox("Inclure", value=True, key=f"inc_{idx}")
+                inclure = st.checkbox("Inclure", value=True, key="inc_" + str(idx))
             with col_part:
-                part_pct = st.number_input(
-                    "Part (%)",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=25.0,
-                    step=5.0,
-                    key=f"part_{idx}",
-                )
+                part_pct = st.number_input("Part (%)", min_value=0.0, max_value=100.0, value=25.0, step=5.0, key="part_" + str(idx))
 
         if not inclure:
             st.caption("Exclu de la répartition.")
             continue
 
-        cap_fnb = (
-            capital_total
-            if "100 %" in mode_capital
-            else (capital_total * (part_pct / 100.0))
-        )
-
-        bougies = obtenir_donnees_historiques(
-            symbole, int(annee_debut), int(annee_fin)
-        )
+        cap_fnb = capital_total if "100 %" in mode_capital else (capital_total * (part_pct / 100.0))
+        bougies = obtenir_donnees_historiques(symbole, int(annee_debut), int(annee_fin))
 
         if not bougies or len(bougies) < 5:
-            st.error(f"Données introuvables pour {symbole}")
+            st.error("Données introuvables pour " + symbole)
             continue
 
         ranges = [((b["high"] - b["low"]) / b["low"]) * 100.0 for b in bougies]
         volatilite_moy = sum(ranges) / len(ranges)
-        st.caption(
-            f"📊 **Volatilité journalière moyenne** : **{volatilite_moy:.2f} %**"
-        )
+        st.caption("📊 Volatilité journalière moyenne : " + str(round(volatilite_moy, 2)) + " %")
 
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1:
-            marge_achat = st.number_input(
-                "Achat (+%)", value=0.05, step=0.01, key=f"ma_{idx}"
-            )
+            marge_achat = st.number_input("Achat (+%)", value=0.05, step=0.01, key="ma_" + str(idx))
         with col_p2:
-            stop_init = st.number_input(
-                "Stop Init (-%)", value=3.0, step=0.5, key=f"si_{idx}"
-            )
+            stop_init = st.number_input("Stop Init (-%)", value=3.0, step=0.5, key="si_" + str(idx))
         with col_p3:
-            marge_stop = st.number_input(
-                "Stop Suiv (-%)", value=0.05, step=0.01, key=f"ms_{idx}"
-            )
+            marge_stop = st.number_input("Stop Suiv (-%)", value=0.05, step=0.01, key="ms_" + str(idx))
 
-        res = executer_backtest(
-            bougies, cap_fnb, marge_achat, stop_init, marge_stop
-        )
+        res = executer_backtest(bougies, cap_fnb, marge_achat, stop_init, marge_stop)
 
         if res:
             st.markdown("**📈 Résultats du Backtest :**")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                st.metric(
-                    "Robot (%)",
-                    f"{res['rendement_robot_pct']:+.1f} %",
-                    delta=f"{res['capital_final'] - cap_fnb:+.0f} $",
-                )
-                st.metric(
-                    "Pire chute",
-                    f"-{res['max_drawdown_pct']:.1f} %",
-                    delta=f"-{res['max_drawdown_dollar']:.0f} $",
-                    delta_color="inverse",
-                )
+                st.metric("Robot (%)", str(round(res['rendement_robot_pct'], 1)) + " %")
+                st.metric("Pire chute", "-" + str(round(res['max_drawdown_pct'], 1)) + " %")
             with col_r2:
-                st.metric("Buy & Hold (%)", f"{res['rendement_bh_pct']:+.1f} %")
-                st.metric("Capital Final", f"{res['capital_final']:,.0f} $")
+                st.metric("Buy & Hold (%)", str(round(res['rendement_bh_pct'], 1)) + " %")
+                st.metric("Capital Final", str(int(res['capital_final'])) + " $")
 
             capital_accumule_robot += res["capital_final"]
             capital_accumule_initial += cap_fnb
             rendements_robot_liste.append(res["rendement_robot_pct"])
             rendements_bh_liste.append(res["rendement_bh_pct"])
 
-            r_robot = res["rendement_robot_pct"]
-            r_bh = res["rendement_bh_pct"]
-            c_final = res["capital_final"]
-            dd_pct = res["max_drawdown_pct"]
-            dd_dol = res["max_drawdown_dollar"]
+            ligne = symbole + " -> Robot: " + str(round(res['rendement_robot_pct'], 1)) + "% | Buy&Hold: " + str(round(res['rendement_bh_pct'], 1)) + "% | MaxDD: -" + str(round(res['max_drawdown_pct'], 1)) + "%"
+            details_export.append(ligne)
 
-            ligne_export = (
-                f"• {symbole} (Volatilite: {volatilite_moy:.2f}%)\n"
-                f"  Robot: {r_robot:+.1f}% | B&H: {r_bh:+.1f}%\n"
-                f"  Cap. Final: {c_final:,.0f} $\vert{} Max DD: -{dd_pct:.1f}\% (-{dd_dol:.0f}$)"
-            )
-            details_export.append(ligne_export)
-
-# --- BILAN GLOBAL ET EXPORTATION EN BAS DE PAGE ---
 st.markdown("---")
 st.subheader("🏁 Bilan Global du Portefeuille")
-
-texte_bilan_global = ""
 
 if capital_accumule_initial > 0:
     if "Répartition" in mode_capital:
         profit_total = capital_accumule_robot - capital_accumule_initial
-        perf_globale_pct = (
-            profit_total / capital_accumule_initial
-        ) * 100.0
-
-        st.metric(
-            "Capital Final Combiné",
-            f"{capital_accumule_robot:,.0f} $",
-            delta=f"{profit_total:+.0f} $",
-        )
-        st.write(f"**Rendement Global Portefeuille :** `{perf_globale_pct:+.2f} %`")
-
-        texte_bilan_global = (
-            f"Capital Depart: {capital_accumule_initial:,.0f} $\n"
-            f"Capital Final: {capital_accumule_robot:,.0f} $({profit_total:+.0f}$)\n"
-            f"Rendement Global: {perf_globale_pct:+.2f} %"
-        )
+        perf_globale_pct = (profit_total / capital_accumule_initial) * 100.0
+        st.metric("Capital Final Combiné", str(int(capital_accumule_robot)) + " $")
+        st.write("Rendement Global Portefeuille : " + str(round(perf_globale_pct, 2)) + " %")
     else:
         moy_robot = sum(rendements_robot_liste) / len(rendements_robot_liste)
         moy_bh = sum(rendements_bh_liste) / len(rendements_bh_liste)
+        st.write("Rendement Moyen Robot : " + str(round(moy_robot, 2)) + " %")
+        st.write("Rendement Moyen Buy & Hold : " + str(round(moy_bh, 2)) + " %")
 
-        st.write(f"**Rendement Moyen Robot :** `{moy_robot:+.2f} %`")
-        st.write(f"**Rendement Moyen Buy & Hold :** `{moy_bh:+.2f} %`")
-
-        texte_bilan_global = (
-            f"Rendement Moyen Robot: {moy_robot:+.2f} %\n"
-            f"Rendement Moyen Buy & Hold: {moy_bh:+.2f} %"
-        )
-
-    # --- EXPORTATION DES RÉSULTATS ---
     st.markdown("---")
     st.subheader("📋 Exporter les résultats")
-
-    date_jour = datetime.now().strftime("%Y-%m-%d %H:%M")
-    rapport_texte = (
-        f"=== RAPPORT BACKTEST 2 CHANDELLES ===\n"
-        f"Date: {date_jour}\n"
-        f"Periode: Janvier {annee_debut} - Janvier {annee_fin}\n"
-        f"Indice ({symbole_indice}): {perf_ndx_str}\n\n"
-        f"--- DETAILS PAR FNB ---\n" + "\n\n".join(details_export) + "\n\n"
-        f"--- BILAN GLOBAL ---\n" + texte_bilan_global
-    )
-
+    rapport_texte = "RAPPORT BACKTEST\n" + "\n".join(details_export)
     st.code(rapport_texte, language="text")
-    st.caption(
-        "💡 Appuie sur la petite icône de **copie** en haut à droite du cadre ci-dessus pour tout copier."
-    )
-
-else:
-    st.info("Sélectionne au moins un FNB pour voir le bilan global.")
