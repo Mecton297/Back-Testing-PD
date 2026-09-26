@@ -1,1 +1,249 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import yfinance as yf
+import math
 
+st.set_page_config(page_title="Backtest 2 Chandelles", layout="centered")
+st.title("📈 Backtest 2 Chandelles")
+
+DEFAULT_TICKERS = {
+    "FNB1": "XEG.TO",
+    "FNB2": "ZMT.TO",
+    "FNB3": "XST.TO",
+    "FNB4": "ZEB.TO",
+    "FNB5": "XIC.TO",
+    "FNB6": "VCN.TO",
+}
+NDX_TICKER = "^NDX"
+METRIC_ROWS = ["% Test", "% Hold", "Gain $", "DD %"]
+
+def run_backtest(df, capital, ach_pct, stinit_pct, stsuiv_pct):
+    df = df.copy().reset_index(drop=True)
+    n = len(df)
+    if n < 3:
+        return capital, 0.0, 0.0, pd.DataFrame(), capital
+
+    cash = float(capital)
+    shares = 0
+    stop = None
+    journal = []
+    equity_curve = [cash]
+
+    for i in range(2, n):
+        c1_high, c2_high = df.loc[i-1, "High"], df.loc[i-2, "High"]
+        c1_low, c2_low = df.loc[i-1, "Low"], df.loc[i-2, "Low"]
+        prev2_high = max(c1_high, c2_high)
+        prev2_low = min(c1_low, c2_low)
+
+        today_high = df.loc[i, "High"]
+        today_low = df.loc[i, "Low"]
+        today_close = df.loc[i, "Close"]
+        today_date = df.loc[i, "Date"] if "Date" in df.columns else i
+
+        exited_today = False
+
+        if shares > 0:
+            potential_stop = prev2_low * (1 - stsuiv_pct / 100)
+            stop = max(stop, potential_stop)
+            if today_low <= stop:
+                exit_price = today_low if today_low < stop else stop
+                cash += shares * exit_price
+                journal.append({"date": today_date, "action": "SORTIE", "prix": round(exit_price, 4),
+                                 "actions": shares, "cash_apres": round(cash, 2),
+                                 "raison": "trailing_stop" if today_low >= stop - 1e-9 else "trailing_stop_gap"})
+                shares = 0
+                stop = None
+                exited_today = True
+
+        if shares == 0 and not exited_today:
+            trigger = prev2_high * (1 + ach_pct / 100)
+            if today_high >= trigger:
+                entry_price = trigger
+                n_shares = math.floor(cash / entry_price) if entry_price > 0 else 0
+                if n_shares > 0:
+                    cash -= n_shares * entry_price
+                    shares = n_shares
+                    stop = entry_price * (1 - stinit_pct / 100)
+                    journal.append({"date": today_date, "action": "ENTREE", "prix": round(entry_price, 4),
+                                     "actions": shares, "cash_apres": round(cash, 2), "raison": "signal_entree"})
+                    if today_low <= stop:
+                        exit_price = today_low if today_low < stop else stop
+                        cash += shares * exit_price
+                        journal.append({"date": today_date, "action": "SORTIE", "prix": round(exit_price, 4),
+                                         "actions": shares, "cash_apres": round(cash, 2), "raison": "stop_meme_jour"})
+                        shares = 0
+                        stop = None
+
+        equity_curve.append(cash + shares * today_close)
+
+    if shares > 0:
+        final_close = df.loc[n-1, "Close"]
+        cash += shares * final_close
+        journal.append({"date": df.loc[n-1, "Date"] if "Date" in df.columns else n-1,
+                         "action": "LIQUIDATION", "prix": round(final_close, 4),
+                         "actions": shares, "cash_apres": round(cash, 2), "raison": "end_of_period"})
+        shares = 0
+
+    equity_curve.append(cash)
+    equity_arr = np.array(equity_curve)
+    running_max = np.maximum.accumulate(equity_arr)
+    drawdowns = (equity_arr - running_max) / running_max
+    max_dd = drawdowns.min() * 100 if len(drawdowns) else 0.0
+    gain = cash - capital
+    return cash, gain, max_dd, pd.DataFrame(journal), cash
+
+
+def buy_and_hold(df, capital):
+    if len(df) < 2:
+        return capital, 0.0
+    final_value = capital * (df["Close"].iloc[-1] / df["Close"].iloc[0])
+    return final_value, final_value - capital
+
+
+@st.cache_data(ttl=3600)
+def download_data(ticker, start, end):
+    raw = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=True)
+    if raw.empty:
+        return None
+    raw = raw.reset_index()
+    raw["Date"] = pd.to_datetime(raw["Date"]).dt.tz_localize(None)
+    return raw[["Date", "Open", "High", "Low", "Close"]].dropna()
+
+
+if "tickers" not in st.session_state:
+    st.session_state.tickers = dict(DEFAULT_TICKERS)
+if "params" not in st.session_state:
+    st.session_state.params = {k: {"ach": 1.0, "stinit": 3.0, "stsuiv": 3.0} for k in DEFAULT_TICKERS}
+if "allocations" not in st.session_state:
+    st.session_state.allocations = {k: round(100/6, 1) for k in DEFAULT_TICKERS}
+if "active" not in st.session_state:
+    st.session_state.active = {k: True for k in DEFAULT_TICKERS}
+if "results" not in st.session_state:
+    st.session_state.results = None
+
+mode = st.radio("Mode de répartition", ["Mode A — 100% par FNB", "Mode B — Répartition %"],
+                 horizontal=True, label_visibility="collapsed")
+
+c1, c2, c3 = st.columns(3)
+capital_total = c1.number_input("Capital $", value=10000, step=500, min_value=100)
+annee_debut = c2.number_input("Début", value=2015, min_value=2000, max_value=2026, step=1)
+annee_fin = c3.number_input("Fin", value=2026, min_value=2000, max_value=2026, step=1)
+
+if mode.startswith("Mode B"):
+    st.caption("Répartition (☑ actif + %)")
+    alloc_cols = st.columns(6)
+    total_pct = 0.0
+    for idx, key in enumerate(DEFAULT_TICKERS):
+        with alloc_cols[idx]:
+            st.session_state.active[key] = st.checkbox(
+                st.session_state.tickers[key], value=st.session_state.active[key], key=f"chk_{key}")
+            st.session_state.allocations[key] = st.number_input(
+                "%", value=st.session_state.allocations[key], min_value=0.0, max_value=100.0,
+                step=1.0, key=f"palloc_{key}", disabled=not st.session_state.active[key],
+                label_visibility="collapsed")
+            if st.session_state.active[key]:
+                total_pct += st.session_state.allocations[key]
+    if abs(total_pct - 100) > 0.01:
+        st.warning(f"⚠️ Somme des allocations = {total_pct:.1f}% (doit être 100%)")
+
+st.markdown("### Résultats")
+labels = [st.session_state.tickers[k] for k in DEFAULT_TICKERS]
+
+if st.session_state.results is None:
+    placeholder_df = pd.DataFrame(
+        {label: ["—", "—", "—", "—"] for label in labels}, index=METRIC_ROWS)
+    st.dataframe(placeholder_df, use_container_width=True)
+else:
+    st.dataframe(st.session_state.results["table"], use_container_width=True)
+
+lancer = st.button("🚀 Lancer le backtest", type="primary", use_container_width=True)
+
+with st.expander("⚙️ Réglages des 6 FNB", expanded=False):
+    for key in DEFAULT_TICKERS:
+        st.markdown(f"**{key}**")
+        cols = st.columns(4)
+        st.session_state.tickers[key] = cols[0].text_input(
+            "Ticker", value=st.session_state.tickers[key], key=f"tk_{key}", label_visibility="collapsed")
+        st.session_state.params[key]["ach"] = cols[1].number_input(
+            "Ach%", value=st.session_state.params[key]["ach"], step=0.1, key=f"ach_{key}")
+        st.session_state.params[key]["stinit"] = cols[2].number_input(
+            "StInit%", value=st.session_state.params[key]["stinit"], step=0.1, key=f"si_{key}")
+        st.session_state.params[key]["stsuiv"] = cols[3].number_input(
+            "StSuiv%", value=st.session_state.params[key]["stsuiv"], step=0.1, key=f"ss_{key}")
+
+if lancer:
+    start_str = f"{int(annee_debut)}-01-01"
+    end_str = f"{int(annee_fin)}-12-31"
+    rows = {m: [] for m in METRIC_ROWS}
+    col_labels = []
+    journals = {}
+
+    with st.spinner("Téléchargement et calcul en cours..."):
+        for key, ticker in st.session_state.tickers.items():
+            data = download_data(ticker, start_str, end_str)
+            col_labels.append(ticker)
+
+            if mode.startswith("Mode A"):
+                cap_ticker = capital_total
+            else:
+                if not st.session_state.active.get(key, False):
+                    for m in METRIC_ROWS:
+                        rows[m].append("—")
+                    continue
+                cap_ticker = capital_total * st.session_state.allocations.get(key, 0) / 100
+                if cap_ticker <= 0:
+                    for m in METRIC_ROWS:
+                        rows[m].append("—")
+                    continue
+
+            if data is None or len(data) < 5:
+                for m in METRIC_ROWS:
+                    rows[m].append("N/A")
+                continue
+
+            p = st.session_state.params[key]
+            final_cash, gain, dd, journal_df, _ = run_backtest(data, cap_ticker, p["ach"], p["stinit"], p["stsuiv"])
+            hold_final, _ = buy_and_hold(data, cap_ticker)
+
+            pct_test = (final_cash / cap_ticker - 1) * 100
+            pct_hold = (hold_final / cap_ticker - 1) * 100
+
+            rows["% Test"].append(f"{round(pct_test)}%")
+            rows["% Hold"].append(f"{round(pct_hold)}%")
+            rows["Gain $"].append(f"{round(gain)} $")
+            rows["DD %"].append(f"{round(dd)}%")
+            journals[ticker] = journal_df
+
+    result_table = pd.DataFrame(rows, index=col_labels).T
+    st.session_state.results = {"table": result_table, "journals": journals}
+    st.rerun()
+
+if st.session_state.results is not None:
+    with st.expander("📜 Journal des trades (par FNB)"):
+        for ticker, jdf in st.session_state.results["journals"].items():
+            st.write(f"**{ticker}**")
+            if len(jdf) > 0:
+                st.dataframe(jdf, hide_index=True, use_container_width=True)
+            else:
+                st.caption("Aucun trade sur la période.")
+
+    st.markdown("---")
+    st.markdown("### 📊 Référence — Nasdaq 100 (^NDX)")
+    start_str = f"{int(annee_debut)}-01-01"
+    end_str = f"{int(annee_fin)}-12-31"
+    ndx_data = download_data(NDX_TICKER, start_str, end_str)
+    if ndx_data is not None and len(ndx_data) > 1:
+        ndx_pct = (ndx_data["Close"].iloc[-1] / ndx_data["Close"].iloc[0] - 1) * 100
+        st.write(f"Buy & Hold ^NDX sur la période : **{round(ndx_pct)}%**")
+
+with st.expander("ℹ️ Notes méthodologiques"):
+    st.markdown("""
+- **Prix** : ajustés (`auto_adjust=True`), corrige splits et dividendes — le "prix seul" n'exclut donc pas
+  complètement l'effet des dividendes réinvestis (limite technique connue).
+- **Entrée** : franchissement du plus haut des 2 chandelles précédentes × (1 + Ach%).
+- **Stop initial** : prix d'entrée × (1 - StInit%). **Stop suiveur** : plus bas des 2 chandelles précédentes
+  × (1 - StSuiv%), ne redescend jamais.
+- **Gap sous le stop** : sortie au Low réel, pas au niveau théorique du stop.
+- **Capital insuffisant** : aucun trade, rien au journal. **Fin de période** : liquidation au dernier Close.
+    """)
