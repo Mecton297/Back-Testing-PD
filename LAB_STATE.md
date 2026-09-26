@@ -145,3 +145,33 @@ Note méthodologique : ces comptages sont strictement descriptifs (contrôle de 
 ### Prochaine étape
 
 Calcul des rendements bruts aux 4 horizons (+1/+5/+10/+20j), entrée Open T+1, avec exclusion des trades dont la fenêtre de détention chevauche un trou > 5 jours calendaires. Toujours 🔴 interdit : tests statistiques (Bonferroni, permutation, blocs temporels) tant que cette étape n'est pas terminée et vérifiée.
+
+## 📝 PATCH PROPOSÉ — Verdict final EXP-014a (2026-09-26)
+
+*(à intégrer dans le corps de LAB_STATE.md par Patrick)*
+
+### EXP-014a — Breakout / expansion de volatilité
+
+**Statut : 🔴 FALSIFIÉE — archivée, ne pas rouvrir sans nouvelle version (V1.1) justifiée**
+
+**Date de coupure gelée utilisée : 2026-09-25** (immuable pour toute réplication future de ce résultat)
+
+**Résultat (24 cellules : 6 paires × 4 horizons) :**
+- 0/24 passe le seuil Bonferroni pré-enregistré (α = 0,05/48 = 0,0010417)
+- 0/24 passe simultanément Bloc A (2006-2015) ET Bloc B (2016-2026)
+- Meilleure p-value individuelle observée : 0,010 (AUDUSD, 20j, Bloc B) — encore ~10× trop élevée pour le seuil requis
+
+**Critères de validation (charter section 17), appliqués strictement :**
+- [ ] Bonferroni global : ❌ échec (0/24)
+- [ ] Réplication indépendante Bloc A ET Bloc B : ❌ échec (0/24)
+- [x] Règle D-001 (trous de calendrier) respectée tout au long du calcul : ✅
+- N/A : le charter ne prévoit AUCUN seuil du type "significatif sur N paires sur 6" (section 16, décision explicite) — ce critère n'existe pas et ne doit pas être ajouté rétroactivement à la grille de validation.
+
+**Conclusion : 014a ne devient PAS une stratégie validée. Elle est classée « hypothèse testée et rejetée », conformément à la philosophie du laboratoire (le labo doit pouvoir dire NON).**
+
+**Aucune modification de paramètre n'a eu lieu après observation des résultats.**
+
+### Prochaine étape
+
+Basculer sur EXP-014b (mean-reversion / étirement extrême Z-score), en suivant exactement le même pipeline étape par étape (signal isolé → rendements → baseline/excess → permutation → Bonferroni + blocs A/B), avec la même date de coupure gelée (2026-09-25).
+
