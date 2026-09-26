@@ -175,3 +175,44 @@ Calcul des rendements bruts aux 4 horizons (+1/+5/+10/+20j), entrée Open T+1, a
 
 Basculer sur EXP-014b (mean-reversion / étirement extrême Z-score), en suivant exactement le même pipeline étape par étape (signal isolé → rendements → baseline/excess → permutation → Bonferroni + blocs A/B), avec la même date de coupure gelée (2026-09-25).
 
+## 📝 PATCH PROPOSÉ — Clôture finale EXP-014 (2026-09-27)
+
+*(à intégrer dans le corps de LAB_STATE.md par Patrick)*
+
+### EXP-014 — FX (Breakout & Mean-Reversion) — 🔴 CYCLE CLÔTURÉ
+
+**Date de coupure gelée : 2026-09-25** (identique pour 014a et 014b, immuable pour toute réplication future)
+
+**Verdict scientifique (formulation exacte, GPT) :**
+
+> EXP-014 n'a fourni aucune preuve statistiquement validée d'un effet robuste pour les deux mécanismes testés, dans l'univers, la période et le protocole définis.
+
+**Détail par mécanisme :**
+
+| Mécanisme | Cellules testées | Cellules validées | Meilleure p-value individuelle |
+|---|---|---|---|
+| 014a (Breakout Donchian/ATR) | 24 | 0 | 0,010 (AUDUSD, 20j, Bloc B) |
+| 014b (Mean-reversion Z-score) | 24 | 0 | 0,173 (USDCHF, 20j, Bloc A) |
+| **Total famille** | **48** | **0** | — |
+
+**Critères appliqués (charter section 17, tels que réellement verrouillés) :**
+- Seuil Bonferroni pré-enregistré : α = 0,05/48 = 0,0010417
+- Réplication indépendante exigée dans Bloc A (2006-2015) ET Bloc B (2016-2026), même direction d'effet
+- Aucun seuil de type « significatif sur N paires sur 6 » — ce critère n'a jamais fait partie du charter verrouillé et n'est pas appliqué
+
+**Ce qui a fonctionné correctement tout au long du cycle :**
+- Aucune modification de paramètre après observation de résultats
+- Date de coupure gelée dès sa fixation, aucune dérive entre les scripts
+- Règle D-001 (trous de calendrier) appliquée uniformément sur les deux mécanismes
+- Aucun ajout rétroactif de critère de validation
+
+### Statut
+
+- Cycle 1 (EXP-001 → EXP-013) : 🔴 FERMÉ, 0 stratégie validée
+- Cycle 2 / EXP-014 (FX) : 🔴 FERMÉ, 0 stratégie validée
+- EXP-015 : 🟡 NON DÉMARRÉE — pause volontaire pour bilan avant toute nouvelle hypothèse (décision GPT, appuyée par consensus)
+
+### Prochaine action
+
+Bilan post-mortem du cycle EXP-014 avant de rédiger un éventuel charter EXP-015. Aucun code, aucune nouvelle expérience tant que ce bilan n'est pas fait.
+
