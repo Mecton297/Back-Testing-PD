@@ -73,3 +73,16 @@ les deux après observation des résultats.
 
 Statut :
 🟢 DÉCISION ACTIVE (paramètres numériques encore à définir)
+
+
+## D-006 — EXP-014a (Breakout FX) formellement rejetée
+
+**Date : 2026-09-26**
+**Contexte : EXP-014, Cycle 2, mécanisme 014a**
+
+**Décision :** EXP-014a (breakout / expansion de volatilité, Donchian(20) + ATR(14), seuil 1,20) est classée 🔴 FALSIFIÉE et archivée. Elle ne sera pas retestée avec d'autres paramètres sous le nom "014a" — toute nouvelle tentative sur une hypothèse de breakout FX nécessiterait un nouveau numéro d'expérience et un nouveau charter pré-enregistré.
+
+**Preuve :** 0/24 cellules (6 paires × 4 horizons) ne passent le seuil Bonferroni pré-enregistré (α=0,0010417) simultanément dans les deux blocs temporels indépendants (2006-2015 et 2016-2026). Date de coupure gelée : 2026-09-25.
+
+**Irréversible sauf nouvelle version documentée du charter EXP-014 (V1.1) avec justification écrite.**
+
