@@ -99,3 +99,49 @@ Statut : CLÔTURÉ. 0 stratégie validée. Voir `rapport_maitre_exp001-013.md` p
 Familles couvertes : oscillateurs, breakout, momentum, retour à la moyenne, volatilité VIX, structure par terme, breadth de marché, volume climax, stress de crédit.
 
 Résultat le plus proche de la validation : EXP-013 (crédit, 24/24 directions positives), rejeté faute de réplication indépendante dans les deux blocs temporels.
+
+## 📝 PATCH PROPOSÉ — clarification chronologie EXP-014 (2026-09-26)
+
+*(à intégrer dans le corps de LAB_STATE.md par Patrick)*
+
+### EXP-014 — Charter V1.0
+
+**Statut : 🟢 VERROUILLÉ le 2026-09-26**, validé par Patrick, consensus GPT + Gemini + Claude.
+Document : `CHARTER_EXP-014_v1.0_FINAL.md` sur GitHub (branche main).
+
+**Chronologie exacte (pour éviter toute confusion pour une future IA/session) :**
+1. Charter rédigé avec tous les paramètres du consensus (48 tests, Bonferroni α=0,0010417, Open T+1, Long & Short, horizons 1/5/10/20j)
+2. Validation humaine reçue : « Je valide »
+3. Fichier marqué 🟢 VERROUILLÉ, poussé sur GitHub
+4. **SEULEMENT ENSUITE** : code du signal 014a (isolé, sans rendement ni stats)
+5. Signaux 014a exécutés et vérifiés (🟢, voir résumé ci-dessous) — **archivés comme artefacts, ne pas supprimer**
+
+**Aucun calcul de résultat n'a précédé le verrouillage.** Toute IA qui rejoint le projet doit vérifier cette chronologie directement sur GitHub (historique des commits) avant de soulever un doute de procédure.
+
+### Protocole d'embarquement pour nouvelle IA (adopté ce jour, proposition GPT)
+
+Avant de coder quoi que ce soit, toute IA qui rejoint une session doit :
+1. Lire `LAB_STATE.md`
+2. Lire `DECISIONS.md`
+3. Lire le charter de l'expérience active
+4. Lire le dernier rapport d'exécution
+5. Répondre explicitement : *« Voici ce que je considère comme verrouillé, ce qui est en attente, et ce qui est interdit. »*
+
+Aucun code avant cette confirmation.
+
+### Résumé signal 014a (🟢 exécuté, 2026-09-26)
+
+| Paire | Signaux Long | Signaux Short | Jours invalides (trous) |
+|---|---|---|---|
+| EURUSD=X | 26 | 23 | 35 |
+| GBPUSD=X | 14 | 30 | 34 |
+| USDJPY=X | 44 | 55 | 35 |
+| USDCHF=X | 18 | 31 | 0 |
+| AUDUSD=X | 18 | 35 | 0 |
+| USDCAD=X | 37 | 15 | 0 |
+
+Note méthodologique : ces comptages sont strictement descriptifs (contrôle de qualité des données). Ils ne constituent pas une validation de la pertinence du seuil ni de l'efficacité du signal.
+
+### Prochaine étape
+
+Calcul des rendements bruts aux 4 horizons (+1/+5/+10/+20j), entrée Open T+1, avec exclusion des trades dont la fenêtre de détention chevauche un trou > 5 jours calendaires. Toujours 🔴 interdit : tests statistiques (Bonferroni, permutation, blocs temporels) tant que cette étape n'est pas terminée et vérifiée.
