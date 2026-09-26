@@ -25,6 +25,7 @@ seule la paire touchée est invalidée sur la zone concernée.
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import io
 
 st.set_page_config(page_title="EXP-014b - Signal seul", layout="wide")
 st.title("🧪 EXP-014b — Signal de mean-reversion (isolé, pas encore de stats)")
@@ -121,7 +122,7 @@ def main():
     summary_df = pd.DataFrame(summary_rows)
     st.dataframe(summary_df, use_container_width=True)
 
-    st.header("🔍 Détail d'une paire (pour vérifier visuellement)")
+    st.header("🔍 Détail d'une paire (aperçu à l'écran, pas besoin de télécharger séparément)")
     chosen = st.selectbox("Choisir une paire à inspecter", UNIVERSE)
     if chosen in all_signals:
         df_chosen = all_signals[chosen]
@@ -130,6 +131,24 @@ def main():
         ]
         st.write(f"{len(signals_only)} signaux trouvés pour {chosen} :")
         st.dataframe(signals_only, use_container_width=True)
+
+    st.header("⬇️ Télécharger TOUT en un seul fichier (résumé + les 6 paires)")
+    buffer = io.StringIO()
+    buffer.write("=== RÉSUMÉ PAR PAIRE ===\n")
+    summary_df.to_csv(buffer, index=False)
+    for ticker, df_sig in all_signals.items():
+        buffer.write(f"\n=== DÉTAIL SIGNAUX — {ticker} ===\n")
+        signals_only = df_sig[df_sig["signal_014b"] != 0][
+            ["Date", "Close", "sma20", "zscore", "signal_014b"]
+        ]
+        signals_only.to_csv(buffer, index=False)
+
+    st.download_button(
+        label="📥 Télécharger exp014b_signal.csv (un seul fichier)",
+        data=buffer.getvalue(),
+        file_name="exp014b_signal.csv",
+        mime="text/csv",
+    )
 
     st.caption(
         "Prochaine étape (une fois ce signal validé visuellement) : "
