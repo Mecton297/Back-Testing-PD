@@ -1,77 +1,197 @@
+"""
+audit_holes_fx.py
+Audit ciblé des trous de calendrier sur l'univers FX du Labo Quant (EXP-014).
+
+Objectif : lister les dates manquantes réelles dans les deux zones suspectes
+(août 2008 sur EURUSD/USDJPY, ~22 avril 2025 sur plusieurs paires),
+SANS interpolation ni reconstruction. On liste ce qui manque, point final.
+
+Corrige le bug KeyError précédent : après reset_index(), la colonne de dates
+s'appelle "Date" (nom de l'index yfinance), pas "index".
+"""
+
 import streamlit as st
 import pandas as pd
-import numpy as np
 import yfinance as yf
+from datetime import datetime
+import io
 
-st.set_page_config(page_title="EXP-014 — Audit des trous FX", layout="centered")
-st.title("🔍 Audit des trous — Août 2008 & Avril 2025")
-st.caption("Aucune interpolation, aucun rendement nul, aucune reconstruction. Objectif unique : lister précisément les dates manquantes.")
+st.set_page_config(page_title="Audit trous FX - EXP-014", layout="wide")
+st.title("🔍 Audit des trous de calendrier — EXP-014 (FX)")
 
-PAIRS = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X"]
-START = "2005-01-01"
-END = "2026-01-01"
+UNIVERSE = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X"]
+START_DATE = "2006-05-16"
 
+# Zones suspectes à examiner en détail (bornes larges pour capturer le contexte)
 ZONES = {
-    "Zone 1 — Août 2008": ("2008-08-01", "2008-09-05"),
-    "Zone 2 — Avril 2025": ("2025-04-10", "2025-04-30"),
+    "Août 2008": ("2008-07-25", "2008-09-05"),
+    "Avril 2025": ("2025-04-10", "2025-04-30"),
 }
 
-if st.button("Lancer l'audit des trous"):
-    raw_data = {}
-    status = st.empty()
-    for pair in PAIRS:
-        status.write(f"Téléchargement {pair}...")
-        df = yf.Ticker(pair).history(start=START, end=END, auto_adjust=False)
-        df.columns = [c.lower() for c in df.columns]
-        df.index = df.index.tz_localize(None)
-        if not df.empty:
-            raw_data[pair] = df
-    status.write("✅ Téléchargements terminés.")
+HOLE_THRESHOLD_DAYS = 5  # Règle D-001 : trou calendaire > 5 jours = zone invalide
 
-    for zone_label, (z_start, z_end) in ZONES.items():
-        st.header(zone_label)
-        expected_bdays = pd.bdate_range(start=z_start, end=z_end)  # freq='B', detecteur initial imparfait (voir note)
-        st.caption(f"Calendrier lundi-vendredi attendu (freq='B', ne tient pas compte des jours fériés réels) : "
-                    f"{len(expected_bdays)} jours entre {z_start} et {z_end}.")
 
-        for pair, df in raw_data.items():
-            actual_dates = set(df.index[(df.index >= z_start) & (df.index <= z_end)])
-            expected_set = set(expected_bdays)
-            missing = sorted(expected_set - actual_dates)
+@st.cache_data(show_spinner=False)
+def load_data(ticker: str, start: str) -> pd.DataFrame:
+    """Télécharge les données et corrige le nom de colonne après reset_index()."""
+    df = yf.download(ticker, start=start, progress=False)
+    if df.empty:
+        return df
+    df = df.reset_index()
+    # FIX: l'index yfinance s'appelle "Date", pas "index" — c'est ce qui
+    # causait le KeyError dans la version précédente.
+    if "Date" not in df.columns:
+        # Filet de sécurité si yfinance change un jour le nom de l'index
+        df = df.rename(columns={df.columns[0]: "Date"})
+    df["Date"] = pd.to_datetime(df["Date"])
+    return df
 
-            with st.expander(f"{pair} — {len(missing)} date(s) 'manquantes' (jours ouvrés Lun-Ven sans observation)"):
-                if missing:
-                    st.dataframe(pd.DataFrame({"Date manquante (jour ouvré attendu)":
-                                                [d.strftime("%Y-%m-%d (%A)") for d in missing]}), hide_index=True)
-                else:
-                    st.write("Aucune date manquante dans cette zone pour cette paire.")
 
-                # Derniere observation avant la zone, et premiere observation apres
-                before = df.index[df.index < z_start]
-                after = df.index[df.index > z_end]
-                last_before = before.max() if len(before) else None
-                first_after = after.min() if len(after) else None
+def find_calendar_gaps(dates: pd.Series, min_gap_days: int) -> pd.DataFrame:
+    """
+    Retourne chaque trou calendaire (écart entre deux jours de trading
+    consécutifs) supérieur ou égal à min_gap_days, avec les vraies dates
+    manquantes listées (calendaire, pas ouvré — pour rester factuel,
+    sans supposer quels jours auraient dû être ouvrés).
+    """
+    dates_sorted = dates.sort_values().reset_index(drop=True)
+    gaps = []
+    for i in range(1, len(dates_sorted)):
+        prev_date = dates_sorted[i - 1]
+        curr_date = dates_sorted[i]
+        gap_days = (curr_date - prev_date).days
+        if gap_days > min_gap_days:
+            missing_dates = pd.date_range(
+                start=prev_date + pd.Timedelta(days=1),
+                end=curr_date - pd.Timedelta(days=1),
+                freq="D",
+            )
+            gaps.append({
+                "date_avant_trou": prev_date,
+                "date_apres_trou": curr_date,
+                "duree_calendaire_jours": gap_days,
+                "nb_dates_manquantes": len(missing_dates),
+                "premiere_date_manquante": missing_dates[0] if len(missing_dates) else None,
+                "derniere_date_manquante": missing_dates[-1] if len(missing_dates) else None,
+            })
+    return pd.DataFrame(gaps)
 
-                st.write(f"**Dernière observation avant la zone** : "
-                         f"{last_before.strftime('%Y-%m-%d') if last_before is not None else 'N/A'}"
-                         f"{' (close=' + str(round(df.loc[last_before, 'close'], 5)) + ')' if last_before is not None else ''}")
-                st.write(f"**Première observation après la zone** : "
-                         f"{first_after.strftime('%Y-%m-%d') if first_after is not None else 'N/A'}"
-                         f"{' (close=' + str(round(df.loc[first_after, 'close'], 5)) + ')' if first_after is not None else ''}")
 
-                # Toutes les observations reellement presentes dans la zone (pas juste les bornes)
-                zone_obs = df.loc[(df.index >= z_start) & (df.index <= z_end), ["close"]].copy()
-                if len(zone_obs) > 0:
-                    zone_obs.index.name = "date"  # reset_index() utilise ce nom, quel qu'il soit chez yfinance
-                    zone_obs = zone_obs.reset_index()
-                    zone_obs["date"] = zone_obs["date"].dt.strftime("%Y-%m-%d (%A)")
-                    st.write(f"**{len(zone_obs)} observation(s) réellement présente(s) dans la zone :**")
-                    st.dataframe(zone_obs, hide_index=True)
+def main():
+    st.markdown(
+        "Ce script **ne fait aucune interpolation ni reconstruction**. "
+        "Il liste uniquement les trous calendaires réels détectés dans les données "
+        "brutes de yfinance, pour chaque paire de l'univers EXP-014."
+    )
 
-    with st.expander("🔒 Rappel du périmètre"):
-        st.code(
-            "Audit de faisabilité EXP-014 — deux zones ciblées uniquement.\n"
-            "Aucune interpolation, aucun rendement nul inséré, aucune reconstruction de prix.\n"
-            "freq='B' est un détecteur initial imparfait (calendrier Lun-Ven brut, sans jours fériés réels) —\n"
-            "chaque date listée doit être jugée au cas par cas, pas traitée automatiquement comme anomalie."
-        )
+    with st.spinner("Téléchargement des données..."):
+        data = {ticker: load_data(ticker, START_DATE) for ticker in UNIVERSE}
+
+    failed = [t for t, df in data.items() if df.empty]
+    if failed:
+        st.error(f"⚠️ Échec de téléchargement pour : {', '.join(failed)}")
+
+    # ---- 1. RÉSUMÉ COMPACT (ce qui doit tenir sur un seul écran) ----
+    st.header("📊 Résumé (tout tient ici, pas besoin de scroller)")
+
+    summary_rows = []
+    all_gaps_by_ticker = {}
+
+    for ticker, df in data.items():
+        if df.empty:
+            continue
+        gaps = find_calendar_gaps(df["Date"], HOLE_THRESHOLD_DAYS)
+        all_gaps_by_ticker[ticker] = gaps
+        summary_rows.append({
+            "Paire": ticker,
+            "Première date": df["Date"].min().date(),
+            "Dernière date": df["Date"].max().date(),
+            "Nb jours de données": len(df),
+            f"Trous > {HOLE_THRESHOLD_DAYS}j calendaires": len(gaps),
+        })
+
+    summary_df = pd.DataFrame(summary_rows)
+    st.dataframe(summary_df, use_container_width=True)
+
+    # ---- 2. ZOOM SUR LES DEUX ZONES SUSPECTES ----
+    st.header("🎯 Zoom sur les deux zones suspectes")
+
+    zone_report_rows = []
+    for zone_name, (zone_start, zone_end) in ZONES.items():
+        st.subheader(zone_name)
+        zone_start_dt = pd.Timestamp(zone_start)
+        zone_end_dt = pd.Timestamp(zone_end)
+
+        found_anything = False
+        for ticker, gaps in all_gaps_by_ticker.items():
+            if gaps.empty:
+                continue
+            in_zone = gaps[
+                (gaps["date_avant_trou"] >= zone_start_dt - pd.Timedelta(days=10))
+                & (gaps["date_apres_trou"] <= zone_end_dt + pd.Timedelta(days=10))
+            ]
+            if not in_zone.empty:
+                found_anything = True
+                for _, row in in_zone.iterrows():
+                    st.write(
+                        f"**{ticker}** : trou de {row['duree_calendaire_jours']} jours "
+                        f"calendaires entre {row['date_avant_trou'].date()} et "
+                        f"{row['date_apres_trou'].date()} "
+                        f"({row['nb_dates_manquantes']} dates manquantes)"
+                    )
+                    zone_report_rows.append({
+                        "zone": zone_name,
+                        "paire": ticker,
+                        **row.to_dict(),
+                    })
+        if not found_anything:
+            st.write("Aucun trou > seuil détecté dans cette zone pour cet univers.")
+
+    # ---- 3. TABLEAU COMPLET DE TOUS LES TROUS (toutes paires) ----
+    st.header("📋 Détail complet de tous les trous détectés (toutes paires)")
+
+    full_gaps_rows = []
+    for ticker, gaps in all_gaps_by_ticker.items():
+        if gaps.empty:
+            continue
+        g = gaps.copy()
+        g.insert(0, "paire", ticker)
+        full_gaps_rows.append(g)
+
+    if full_gaps_rows:
+        full_gaps_df = pd.concat(full_gaps_rows, ignore_index=True)
+        st.dataframe(full_gaps_df, use_container_width=True)
+    else:
+        full_gaps_df = pd.DataFrame()
+        st.write("Aucun trou détecté sur l'ensemble de l'univers.")
+
+    # ---- 4. EXPORT CSV — pour éviter les captures d'écran multiples ----
+    st.header("⬇️ Télécharger le rapport complet")
+    st.markdown(
+        "**Un seul clic, un seul fichier.** Télécharge ce CSV et envoie-le "
+        "directement dans la conversation — plus besoin de captures d'écran."
+    )
+
+    buffer = io.StringIO()
+    buffer.write("=== RÉSUMÉ PAR PAIRE ===\n")
+    summary_df.to_csv(buffer, index=False)
+    buffer.write("\n=== TROUS DANS LES ZONES SUSPECTES ===\n")
+    pd.DataFrame(zone_report_rows).to_csv(buffer, index=False)
+    buffer.write("\n=== TOUS LES TROUS DÉTECTÉS ===\n")
+    full_gaps_df.to_csv(buffer, index=False)
+
+    st.download_button(
+        label="📥 Télécharger audit_trous_fx.csv",
+        data=buffer.getvalue(),
+        file_name=f"audit_trous_fx_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv",
+    )
+
+    st.caption(
+        f"Généré le {datetime.now().strftime('%Y-%m-%d %H:%M')} — "
+        f"Seuil de trou appliqué : {HOLE_THRESHOLD_DAYS} jours calendaires (règle D-001)."
+    )
+
+
+if __name__ == "__main__":
+    main()
