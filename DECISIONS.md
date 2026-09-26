@@ -86,3 +86,18 @@ Statut :
 
 **Irréversible sauf nouvelle version documentée du charter EXP-014 (V1.1) avec justification écrite.**
 
+## D-007 — Clôture formelle d'EXP-014 (FX, Breakout & Mean-Reversion)
+
+**Date : 2026-09-27**
+**Contexte : fin du Cycle 2 du laboratoire**
+
+**Décision :** EXP-014 est officiellement clôturée. Les deux mécanismes pré-enregistrés (014a breakout, 014b mean-reversion) sont classés 🔴 FALSIFIÉS selon le protocole verrouillé (charter V1.0). Aucune des 48 cellules de la famille statistique (2 mécanismes × 6 paires × 4 horizons) ne passe le seuil Bonferroni (α=0,0010417) de façon synchrone dans les deux blocs temporels indépendants.
+
+**Formulation scientifique retenue (à utiliser dans toute référence future à EXP-014) :**
+
+> EXP-014 n'a fourni aucune preuve statistiquement validée d'un effet robuste pour les deux mécanismes testés, dans l'univers, la période et le protocole définis.
+
+**Irréversible.** EXP-014 ne sera pas rouverte avec les mêmes paramètres. Toute nouvelle exploration d'idées de breakout ou de mean-reversion en FX nécessiterait une nouvelle expérience numérotée avec un charter pré-enregistré distinct.
+
+**Décision annexe :** avant de démarrer EXP-015, le laboratoire observe une pause volontaire pour un bilan post-mortem du Cycle 2. Aucun code ni aucune nouvelle hypothèse tant que ce bilan n'est pas complété et documenté.
+
